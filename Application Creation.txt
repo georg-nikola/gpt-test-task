@@ -187,3 +187,198 @@ Security Best Practices:
     Always be careful not to accidentally commit and push AWS credentials to public repositories.
 
 Lastly, when provisioning infrastructure programmatically, consider infrastructure as code tools like AWS CloudFormation or AWS CDK, which provide more structured, maintainable, and repeatable methods of deploying resources.
+User
+How would I use my function locally, assume I have setup access to the aws account via environment variables
+ChatGPT
+
+If you want to test your function locally, you'd typically make use of AWS's SAM (Serverless Application Model) CLI, which provides a way to test AWS Lambda functions locally. However, since your request is to keep things simple with environment variables and the existing setup, let's go with a straightforward approach.
+
+Given that you've set up your AWS credentials via environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally AWS_DEFAULT_REGION), the boto3 SDK will automatically use these for authentication.
+
+Here's how you can run your Lambda function locally:
+
+    Setup:
+
+    Ensure you're inside your virtual environment:
+
+    bash
+
+source aws-metrics-env/bin/activate
+
+Run the function:
+
+You can create a Python script (e.g., test_app.py) to call the Lambda function handler locally:
+
+python
+
+from app import lambda_handler
+
+# Define a test event (You can modify this as needed to simulate different EventBridge payloads)
+test_event = {}
+
+# Define a test context (a mock, since it's only needed if you access context attributes in your function)
+test_context = {}
+
+# Invoke the lambda function handler
+response = lambda_handler(test_event, test_context)
+
+# Print the response
+print(response)
+
+Execute the script:
+
+bash
+
+    python test_app.py
+
+This will invoke your Lambda function handler (lambda_handler) as if it was triggered by AWS EventBridge, but it's running locally using your local Python environment and AWS credentials.
+
+Points to consider:
+
+    This method is a basic way of invoking the function locally. In a more advanced setup, you might want to look into tools like localstack or AWS's SAM CLI for a more accurate emulation of the AWS environment.
+    Be careful when running AWS-related operations locally, especially when these operations could incur costs, modify resources, or expose sensitive data.
+    If your function interacts with AWS resources, remember that while you're testing locally, the resources it interacts with (like S3, EC2) are real resources on AWS.
+    It's always a good idea to have a separate AWS account or separate environment for testing to avoid any unintentional changes to production resources.
+
+User
+Which files should I upload to lambda to make this python application usable?
+ChatGPT
+
+For your Python application to be usable in AWS Lambda, you need to package the application code and any dependencies together.
+
+Here's a step-by-step guide:
+
+    Activate your virtual environment:
+
+    bash
+
+source aws-metrics-env/bin/activate
+
+Package your application:
+
+Given that your application currently uses only boto3, which is provided by default in the AWS Lambda Python runtime, you technically wouldn't need to package it. However, it's good practice to package it anyway in case you add more dependencies later.
+
+    First, navigate to the directory containing your virtual environment.
+    Create a new directory (e.g., lambda_package) where you'll place everything needed for the Lambda function.
+    Copy your app.py to lambda_package.
+    Next, copy all the necessary packages from the site-packages of your virtual environment to lambda_package.
+
+bash
+
+cp -r aws-metrics-env/lib/python3.x/site-packages/* lambda_package/
+
+Replace 3.x with your actual Python version (e.g., 3.8).
+
+Compress the package directory:
+
+Navigate to where your lambda_package directory is and compress its contents:
+
+bash
+
+    cd lambda_package
+    zip -r ../lambda_function_payload.zip .
+
+    Upload to AWS Lambda:
+        Go to the AWS Lambda Console.
+        Create a new Lambda function or update an existing one.
+        In the Function code section, select "Upload a .zip file" and upload the lambda_function_payload.zip you just created.
+        Set the runtime to Python 3.x (whichever version you used).
+        Set the handler information. If your function is named lambda_handler inside app.py, set the handler as app.lambda_handler.
+
+Some best practices & notes:
+
+    For larger projects with multiple dependencies, you might find it cumbersome to manage and package everything manually. In such cases, tools like the AWS SAM (Serverless Application Model) or frameworks like serverless can help streamline the packaging and deployment process.
+
+    It's a good idea to exclude unnecessary files from the Lambda package to reduce its size. AWS Lambda has a limit on deployment package size, which is 50 MB for direct upload through the console and 250 MB when uploaded from S3.
+
+    Always test the function after deploying to ensure that the uploaded code works as expected in the AWS environment.
+
+User
+I uploaded only my app.py, which is as follows 
+import boto3
+import json
+
+def lambda_handler(event, context):
+    ec2 = boto3.resource('ec2')
+    s3 = boto3.resource('s3')
+    
+    unattached_volumes = list(ec2.volumes.filter(Filters=[{'Name': 'status', 'Values': ['available']}]))
+    non_encrypted_volumes = list(ec2.volumes.filter(Filters=[{'Name': 'encrypted', 'Values': ['false']}]))
+    non_encrypted_snapshots = list(ec2.snapshots.filter(Filters=[{'Name': 'encrypted', 'Values': ['false']}]))
+    
+    metrics = {
+        'unattached_volumes_count': len(unattached_volumes),
+        'unattached_volumes_size': sum([vol.size for vol in unattached_volumes]),
+        'non_encrypted_volumes_count': len(non_encrypted_volumes),
+        'non_encrypted_snapshots_count': len(non_encrypted_snapshots)
+    }
+
+    # Save metrics to S3
+    bucket_name = "aws-metrics-bucket"
+    s3.Object(bucket_name, 'metrics.json').put(Body=json.dumps(metrics))
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(metrics)
+    }
+
+Via a zip file and set the handler to app.lambda_handler, the lambda function has the needed permissions to list all ec2 objects and all actions within s3 buckets. Could you please help me troubleshoot this error message when running a test with payload '{}' and error message '{
+  "errorMessage": "2023-08-14T10:49:08.466Z 7c712ff6-dd1f-4f8c-8073-e00c6109c5e6 Task timed out after 3.04 seconds"
+}'in response?
+ChatGPT
+
+The error message you're seeing, Task timed out after 3.04 seconds, indicates that your Lambda function took longer than its configured timeout to complete.
+
+Here's how you can troubleshoot and resolve this:
+
+    Increase the Lambda Timeout:
+
+    The first and simplest step is to increase the timeout setting of your Lambda function. By default, the timeout might be set to a short duration (e.g., 3 seconds).
+        In the AWS Lambda Console, navigate to the Configuration tab for your function.
+        Under General configuration, click Edit.
+        Increase the Timeout value. For example, set it to 30 seconds to see if the function completes within that time.
+        Save and test the function again.
+
+    Logging:
+
+    It's essential to understand where the function might be getting delayed.
+
+        Introduce logging throughout your function to identify which step is taking time. For this, you can use Python's built-in logging library.
+
+        python
+
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+Add logs at various stages of your function:
+
+python
+
+logger.info("Started querying unattached volumes...")
+
+Then, after the operation:
+
+python
+
+        logger.info("Finished querying unattached volumes...")
+
+        After adding logging, re-upload your Lambda function and run it. Check the logs in AWS CloudWatch to identify which part of your function is causing the delay.
+
+    Optimize Queries:
+
+    If your AWS environment has a large number of resources (volumes, snapshots), fetching all of them might take significant time. Consider optimizing or batching your queries if possible.
+
+    Lambda Memory and Performance:
+
+    The performance of a Lambda function is directly proportional to the memory configured. If you've set a low memory amount, consider increasing it as it will also proportionally increase the CPU power and I/O performance.
+
+    Check Dependencies:
+
+    Although in this specific instance you're using only boto3, it's good to be aware that any external libraries not included in the Lambda runtime need to be bundled with your Lambda function. Missing dependencies can sometimes cause issues, although the error message would typically be different in those cases.
+
+    VPC Configuration:
+
+    If your Lambda function is configured to run inside a VPC, ensure that the VPC has the necessary network configuration (NAT Gateway, VPC endpoints, etc.) to communicate with AWS services, especially if you're accessing services outside the VPC like S3.
+
+After making any of the above changes, re-test your Lambda function and check if the timeout issue is resolved. If not, dive deeper into the CloudWatch logs to understand the bottlenecks.
