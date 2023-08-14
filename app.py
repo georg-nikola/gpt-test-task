@@ -8,7 +8,6 @@ def lambda_handler(event, context):
     unattached_volumes = list(ec2.volumes.filter(Filters=[{'Name': 'status', 'Values': ['available']}]))
     non_encrypted_volumes = list(ec2.volumes.filter(Filters=[{'Name': 'encrypted', 'Values': ['false']}]))
     non_encrypted_snapshots = list(ec2.snapshots.filter(Filters=[{'Name': 'encrypted', 'Values': ['false']}]))
-    
     metrics = {
         'unattached_volumes_count': len(unattached_volumes),
         'unattached_volumes_size': sum([vol.size for vol in unattached_volumes]),
@@ -18,7 +17,24 @@ def lambda_handler(event, context):
 
     # Save metrics to S3
     bucket_name = "aws-metrics-bucket"
-    s3.Object(bucket_name, 'metrics.json').put(Body=json.dumps(metrics))
+    try:
+        s3.Object(bucket_name, 'metrics.json').put(Body=json.dumps(metrics))
+    except s3.meta.client.exceptions.NoSuchBucket as e:
+        return {
+            'statusCode': 500,
+            'body': f"Error: The bucket '{bucket_name}' does not exist."
+        }
+    except s3.meta.client.exceptions.AccessDenied as e:
+        return {
+            'statusCode': 403,
+            'body': f"Error: Access denied when writing to '{bucket_name}'."
+        }
+    except Exception as e:
+        # Catch any other exception (this is a general exception, so be cautious about using it)
+        return {
+            'statusCode': 500,
+            'body': f"Error: {str(e)}"
+        }
 
     return {
         'statusCode': 200,
