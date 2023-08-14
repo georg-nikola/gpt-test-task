@@ -7,16 +7,16 @@ def create_s3_bucket(bucket_name):
 def create_disks_and_snapshots():
     ec2 = boto3.resource('ec2')
     # Create unattached disk
-    ec2.create_volume(Size=1, AvailabilityZone='us-west-1a')
+    ec2.create_volume(Size=1, AvailabilityZone='eu-north-1a')
     
     # Create non-encrypted disks
     for _ in range(2):
-        ec2.create_volume(Size=1, AvailabilityZone='us-west-1a', Encrypted=False)
+        ec2.create_volume(Size=1, AvailabilityZone='eu-north-1a', Encrypted=False)
     
     # Create encrypted snapshots
     for _ in range(3):
-        volume = ec2.create_volume(Size=1, AvailabilityZone='us-west-1a', Encrypted=False)
-        snapshot = volume.create_snapshot(Description="Encrypted Snapshot")
+        volume = ec2.create_volume(Size=1, AvailabilityZone='eu-north-1a', Encrypted=False)
+        snapshot = volume.create_snapshot(Description="Unencrypted Snapshot")
         # If you want to cleanup and not maintain the volumes, delete them after creating snapshots
         volume.delete()
 
