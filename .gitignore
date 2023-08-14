@@ -161,3 +161,12 @@ cython_debug/
 
 # Local venv
 /aws-metrics-env
+
+# Lambda package
+/lambda_package
+
+# Zip files
+*.zip
+
+# MAC files
+.DS_Store
